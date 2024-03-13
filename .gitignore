@@ -1,0 +1,8 @@
+# Output of go tools
+*.out
+*.test
+coverage.txt
+*.coverprofile
+
+# Misc
+.DS_Store
