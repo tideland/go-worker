@@ -8,7 +8,11 @@ package worker
 
 import "time"
 
-// Worker represents a worker.
+// Worker is the main type of the package. It runs tasks enqueued in background
+// and does not have any methods beside the constructor. It allows the different
+// commands to run special kind of tasks in the background. Beside only enqueuing
+// tasks it's also possible to wait for the execution of a task or retrieve a waiter
+// to get a notification when the worker has finished the task.
 type Worker struct {
 	tasks   chan Task
 	timeout time.Duration

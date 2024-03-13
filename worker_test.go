@@ -8,6 +8,7 @@ package worker_test
 
 import (
 	"testing"
+	"time"
 
 	"tideland.dev/go/audit/asserts"
 
@@ -44,6 +45,7 @@ func TestEnqueueOK(t *testing.T) {
 	assert.OK(err)
 	assert.NotNil(w)
 
+	// Enqueue some counter tasks.
 	count := 0
 	task := func() error {
 		count++
@@ -56,10 +58,41 @@ func TestEnqueueOK(t *testing.T) {
 	err = worker.EnqueueFunc(w, task)
 	assert.OK(err)
 
+	// Stop the worker and check the count.
 	err = worker.Stop(w)
 	assert.OK(err)
 
 	assert.Equal(count, 3)
+}
+
+func TestAsyncAwaitOK(t *testing.T) {
+	assert := asserts.NewTesting(t, asserts.FailStop)
+	w, err := worker.New()
+	assert.OK(err)
+	assert.NotNil(w)
+
+	count := 0
+	task := func() error {
+		count++
+		return nil
+	}
+	await, err := worker.AsyncAwaitFunc(w, task, 1*time.Second)
+	assert.OK(err)
+
+	// Simulate some work.
+	simulator := 0
+	for i := 0; i < 50; i++ {
+		simulator++
+	}
+
+	// Wait for the worker to finish the task.
+	err = await()
+	assert.OK(err)
+
+	err = worker.Stop(w)
+	assert.OK(err)
+
+	assert.Equal(count, 1)
 }
 
 // -----------------------------------------------------------------------------
