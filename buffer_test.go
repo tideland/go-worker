@@ -73,6 +73,38 @@ func TestRatedBufferInOut(t *testing.T) {
 	cancel()
 }
 
+func TestRatedBufferRate(t *testing.T) {
+	assert := asserts.NewTesting(t, asserts.FailStop)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	in, out := setupRatedBuffer(ctx, 2, 10, time.Second)
+	expected := 500 * time.Millisecond
+
+	assert.NotNil(in)
+	assert.NotNil(out)
+
+	assert.NoError(in(makeProcessATask("A")))
+	assert.NoError(in(makeProcessATask("B")))
+	assert.NoError(in(makeProcessATask("C")))
+	assert.NoError(in(makeProcessATask("D")))
+	assert.NoError(in(makeProcessATask("E")))
+	assert.NoError(in(makeShutdownATask()))
+
+	for {
+		now := time.Now()
+		atask := <-out()
+		action, task := atask()
+		duration := time.Since(now)
+		assert.Logf("duration %v", duration)
+		assert.About(float64(duration), float64(expected), float64(100*time.Millisecond))
+		if action == actionShutdown {
+			break
+		}
+		assert.Logf("task error %q", task().Error())
+	}
+	cancel()
+}
+
 // -----------------------------------------------------------------------------
 // internal helper
 // -----------------------------------------------------------------------------
