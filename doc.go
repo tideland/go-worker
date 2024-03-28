@@ -13,7 +13,7 @@
 // The EnqueueWaiting function is a convenience function for running
 // a task and stops once the task is done.
 
-package worker
+package worker // import "tideland.dev/go/worker"
 
 // -----------------------------------------------------------------------------
 // end of file

@@ -4,21 +4,21 @@
 // Copyright (C) 2024 Frank Mueller / Oldenburg / Germany / World
 // -----------------------------------------------------------------------------
 
-package worker
+package worker // import "tideland.dev/go/worker"
 
-// Task represents the interface any task has to implement. Process has to
-// implement the work to be done.
-type Task interface {
-	Process() error
-}
+// Task defines the signature of a task functionto be processed by a worker.
+type Task func() error
 
-// TaskFunc allows to use a function as a task. This way it's possible to
-// create a task using a function or a closure.
-type TaskFunc func() error
+// action allows to control the worker.
+type action int
 
-func (f TaskFunc) Process() error {
-	return f()
-}
+const (
+	actionProcess action = iota
+	actionShutdown
+)
+
+// actionTask combines an action with the tast to be processed.
+type actionTask func() (action, Task)
 
 // -----------------------------------------------------------------------------
 // end of file

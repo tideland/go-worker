@@ -4,31 +4,28 @@
 // Copyright (C) 2024 Frank Mueller / Oldenburg / Germany / World
 // -----------------------------------------------------------------------------
 
-package worker
+package worker // import "tideland.dev/go/worker"
 
 import "time"
 
 // Enqueue passes a task to a worker.
 func Enqueue(w *Worker, task Task) error {
-	return w.enqueue(task)
-}
-
-// EnqueueFunc is a shortcut to pass a function as task to a worker.
-func EnqueueFunc(w *Worker, task TaskFunc) error {
-	return w.enqueue(task)
+	return w.enqueue(func() (action, Task) {
+		return actionProcess, task
+	})
 }
 
 // EnqueueWaiting passes a task to a worker and waits until it has been processed.
 func EnqueueWaiting(w *Worker, task Task) error {
 	done := make(chan struct{})
-	signaller := TaskFunc(func() error {
-		task.Process()
-		close(done)
-		return nil
-	})
+	signaller := func() (action, Task) {
+		defer close(done)
+		return actionProcess, task
+	}
 	if err := w.enqueue(signaller); err != nil {
 		return err
 	}
+	// Wait for the worker to finish the task.
 	select {
 	case <-done:
 		return nil
@@ -46,14 +43,17 @@ type Awaiter func() error
 // before waiting for the worker to finish the task.
 func AsyncAwait(w *Worker, task Task, timeout time.Duration) (Awaiter, error) {
 	done := make(chan struct{})
-	signaller := TaskFunc(func() error {
-		task.Process()
-		close(done)
-		return nil
-	})
+	signaller := func() (action, Task) {
+		return actionProcess, func() error {
+			defer close(done)
+			err := task()
+			return err
+		}
+	}
 	if err := w.enqueue(signaller); err != nil {
 		return nil, err
 	}
+	// Return a function waiting for the worker to finish the task.
 	return func() error {
 		select {
 		case <-done:
@@ -64,18 +64,13 @@ func AsyncAwait(w *Worker, task Task, timeout time.Duration) (Awaiter, error) {
 	}, nil
 }
 
-// AsyncAwaitFunc is a shortcut for AsyncAwait with a task function.
-func AsyncAwaitFunc(w *Worker, task TaskFunc, timeout time.Duration) (Awaiter, error) {
-	return AsyncAwait(w, task, timeout)
-}
-
-// Stop tells the worker to stop. It's working asynchronously internally
-// to let all enqueued tasks be done. Afterward the function returns.
-func Stop(w *Worker) error {
-	stopTask := TaskFunc(func() error {
-		return stopError{}
-	})
-	return EnqueueWaiting(w, stopTask)
+// Shutdown tells the worker to stop working. It's an asynchronous operation and
+// returns immediately. The worker will finish all tasks gracefully before stopping.
+func Shutdown(w *Worker) error {
+	shutdown := func() (action, Task) {
+		return actionShutdown, nil
+	}
+	return w.enqueue(shutdown)
 }
 
 // -----------------------------------------------------------------------------

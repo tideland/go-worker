@@ -4,22 +4,26 @@
 // Copyright (C) 2024 Frank Mueller / Oldenburg / Germany / World
 // -----------------------------------------------------------------------------
 
-package worker
+package worker // import "tideland.dev/go/worker"
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
-// Worker is the main type of the package. It runs tasks enqueued in background
-// and does not have any methods beside the constructor. It allows the different
-// commands to run special kind of tasks in the background. Beside only enqueuing
-// tasks it's also possible to wait for the execution of a task or retrieve a waiter
-// to get a notification when the worker has finished the task.
+// Worker help to enqueue tasks and process them in the background in order. Stopping
+// the worker with the according command ensures that all tasks before are processed.
 type Worker struct {
-	tasks   chan Task
+	rate    int
+	burst   int
 	timeout time.Duration
+	in      input
+	out     output
 }
 
-// New creates a new worker. queueCap is the capacity of the task queue.
-func New(options ...Option) (*Worker, error) {
+// New creates a new worker. The options are used to configure the worker. If no
+// options are given the worker is created with default settings.
+func New(ctx context.Context, options ...Option) (*Worker, error) {
 	worker := &Worker{}
 
 	// Set different options.
@@ -29,13 +33,22 @@ func New(options ...Option) (*Worker, error) {
 		}
 	}
 
-	// Check if the task has been configured.
-	if worker.tasks == nil {
-		worker.tasks = make(chan Task, defaultQueueCap)
+	// Check if the options are set or use defaults.
+	if worker.rate == 0 {
+		worker.rate = defaultRate
+	}
+	if worker.burst == 0 {
+		worker.burst = defaultBurst
 	}
 	if worker.timeout == 0 {
 		worker.timeout = defaultTimeout
 	}
+
+	// Set input and output for limited buffer.
+	in, out := setupRatedBuffer(ctx, worker.rate, worker.burst, worker.timeout)
+
+	worker.in = in
+	worker.out = out
 
 	// Start the worker as goroutine. It's ready when the started channel is closed.
 	started := make(chan struct{})
@@ -52,30 +65,28 @@ func New(options ...Option) (*Worker, error) {
 }
 
 // enqueue passes a task to the worker.
-func (w *Worker) enqueue(task Task) error {
-	select {
-	case w.tasks <- task:
-		return nil
-	case <-time.After(w.timeout):
-		return TimeoutError{}
-	}
+func (w *Worker) enqueue(task actionTask) error {
+	return w.in(task)
 }
 
 // processor runs the worker goroutine for processing the tasks.
 func (w *Worker) processor(started chan struct{}) {
 	close(started)
-	for {
-		select {
-		case task := <-w.tasks:
-			// Run the task.
-			err := task.Process()
-			switch err.(type) {
-			case stopError:
-				return
-			default:
-				// Hande the error.
+	for atask := range w.out() {
+		action, task := atask()
+		// Check action.
+		switch action {
+		case actionProcess:
+			if err := task(); err != nil {
+				// Handle the error.
 				// TODO: log the error.
+				// Continue with the next task.
+				continue
 			}
+		case actionShutdown:
+			// Shutdown the worker.
+			// TODO: log the shutdown.
+			return
 		}
 	}
 }

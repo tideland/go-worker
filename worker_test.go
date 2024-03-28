@@ -7,6 +7,7 @@
 package worker_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -22,7 +23,7 @@ import (
 // TestNewOK tests the simple creation of a worker.
 func TestNewOK(t *testing.T) {
 	assert := asserts.NewTesting(t, asserts.FailStop)
-	w, err := worker.New()
+	w, err := worker.New(context.TODO())
 	assert.OK(err)
 	assert.NotNil(w)
 }
@@ -30,18 +31,18 @@ func TestNewOK(t *testing.T) {
 // TestStoppingOK tests the stopping of running worker.
 func TestStoppingOK(t *testing.T) {
 	assert := asserts.NewTesting(t, asserts.FailStop)
-	w, err := worker.New()
+	w, err := worker.New(context.TODO())
 	assert.OK(err)
 	assert.NotNil(w)
 
-	err = worker.Stop(w)
+	err = worker.Shutdown(w)
 	assert.OK(err)
 }
 
 // TestEnqueueOK tests the enqueuing of tasks in order to process them.
 func TestEnqueueOK(t *testing.T) {
 	assert := asserts.NewTesting(t, asserts.FailStop)
-	w, err := worker.New()
+	w, err := worker.New(context.TODO())
 	assert.OK(err)
 	assert.NotNil(w)
 
@@ -51,15 +52,15 @@ func TestEnqueueOK(t *testing.T) {
 		count++
 		return nil
 	}
-	err = worker.EnqueueFunc(w, task)
+	err = worker.Enqueue(w, task)
 	assert.OK(err)
-	err = worker.EnqueueFunc(w, task)
+	err = worker.Enqueue(w, task)
 	assert.OK(err)
-	err = worker.EnqueueFunc(w, task)
+	err = worker.Enqueue(w, task)
 	assert.OK(err)
 
 	// Stop the worker and check the count.
-	err = worker.Stop(w)
+	err = worker.Shutdown(w)
 	assert.OK(err)
 
 	assert.Equal(count, 3)
@@ -67,7 +68,7 @@ func TestEnqueueOK(t *testing.T) {
 
 func TestAsyncAwaitOK(t *testing.T) {
 	assert := asserts.NewTesting(t, asserts.FailStop)
-	w, err := worker.New()
+	w, err := worker.New(context.TODO())
 	assert.OK(err)
 	assert.NotNil(w)
 
@@ -76,7 +77,7 @@ func TestAsyncAwaitOK(t *testing.T) {
 		count++
 		return nil
 	}
-	await, err := worker.AsyncAwaitFunc(w, task, 1*time.Second)
+	await, err := worker.AsyncAwait(w, task, 1*time.Second)
 	assert.OK(err)
 
 	// Simulate some work.
@@ -89,7 +90,7 @@ func TestAsyncAwaitOK(t *testing.T) {
 	err = await()
 	assert.OK(err)
 
-	err = worker.Stop(w)
+	err = worker.Shutdown(w)
 	assert.OK(err)
 
 	assert.Equal(count, 1)
