@@ -11,4 +11,4 @@ Handle synchronous and asynchronous tasks enqueued in the background.
 
 ## Contributors
 
-- Frank Mueller (https://github.com/themue / https://github.com/tideland / https://tideland.dev)
+- Frank Mueller (https://github.com/themue / https://github.com/tideland / https://themue.dev)

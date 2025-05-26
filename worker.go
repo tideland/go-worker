@@ -1,96 +1,150 @@
 // -----------------------------------------------------------------------------
-// worker for running tasks enqueued in background
+// worker for running tasks enqueued in background - worker
 //
-// Copyright (C) 2024 Frank Mueller / Oldenburg / Germany / World
+// Copyright (C) 2024-2025 Frank Mueller / Oldenburg / Germany / World
 // -----------------------------------------------------------------------------
 
-package worker // import "tideland.dev/go/worker"
+package worker
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
-// Worker help to enqueue tasks and process them in the background in order. Stopping
-// the worker with the according command ensures that all tasks before are processed.
+// Worker is a simple configurable task queue that processes tasks in background.
 type Worker struct {
-	rate    int
-	burst   int
-	timeout time.Duration
-	in      input
-	out     output
+	config Config
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	taskCh   chan Task
+	done     chan struct{}
+	stopOnce sync.Once
+	running  bool
+	mu       sync.RWMutex
 }
 
-// New creates a new worker. The options are used to configure the worker. If no
-// options are given the worker is created with default settings.
-func New(ctx context.Context, options ...Option) (*Worker, error) {
-	worker := &Worker{}
-
-	// Set different options.
-	for _, option := range options {
-		if err := option(worker); err != nil {
-			return nil, err
-		}
+// New creates and starts a new worker with the given configuration.
+// If no configuration is provided, default configuration is used.
+func New(cfg Config) (*Worker, error) {
+	// Handle empty configuration.
+	if (Config{}) == cfg {
+		cfg = DefaultConfig()
 	}
 
-	// Check if the options are set or use defaults.
-	if worker.rate == 0 {
-		worker.rate = defaultRate
-	}
-	if worker.burst == 0 {
-		worker.burst = defaultBurst
-	}
-	if worker.timeout == 0 {
-		worker.timeout = defaultTimeout
+	// Validate configuration.
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
 
-	// Set input and output for limited buffer.
-	in, out := setupRatedBuffer(ctx, worker.rate, worker.burst, worker.timeout)
+	// Create worker context.
+	ctx, cancel := context.WithCancel(cfg.Context)
 
-	worker.in = in
-	worker.out = out
+	// Create worker.
+	w := &Worker{
+		config:  cfg,
+		ctx:     ctx,
+		cancel:  cancel,
+		taskCh:  make(chan Task, cfg.Burst),
+		done:    make(chan struct{}),
+		running: true,
+	}
 
-	// Start the worker as goroutine. It's ready when the started channel is closed.
-	started := make(chan struct{})
+	// Start processing in background.
+	go w.run()
 
-	go worker.processor(started)
+	return w, nil
+}
+
+// enqueue adds a task to the worker's queue.
+// This is an internal method used by commands.
+func (w *Worker) enqueue(task Task) error {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	if !w.running {
+		return ShuttingDownError{}
+	}
 
 	select {
-	case <-started:
-	case <-time.After(worker.timeout):
-		return nil, NotStartedError{}
+	case <-w.ctx.Done():
+		return ShuttingDownError{}
+	case w.taskCh <- task:
+		return nil
+	case <-time.After(w.config.Timeout):
+		return TimeoutError{Duration: w.config.Timeout}
+	}
+}
+
+// stop initiates graceful shutdown of the worker.
+// This is an internal method used by commands.
+func (w *Worker) stop() error {
+	var err error
+	w.stopOnce.Do(func() {
+		w.mu.Lock()
+		w.running = false
+		w.mu.Unlock()
+
+		// Cancel context to signal shutdown.
+		w.cancel()
+
+		// Wait for completion or timeout.
+		select {
+		case <-w.done:
+			// Clean shutdown.
+		case <-time.After(w.config.ShutdownTimeout):
+			// Timeout during shutdown.
+			err = TimeoutError{Duration: w.config.ShutdownTimeout}
+		}
+	})
+	return err
+}
+
+// run is the main processing loop that runs in a separate goroutine.
+func (w *Worker) run() {
+	defer close(w.done)
+
+	for {
+		select {
+		case <-w.ctx.Done():
+			// Context cancelled, process remaining tasks and shutdown.
+			w.processPendingTasks()
+			return
+
+		case task := <-w.taskCh:
+			// Process task immediately.
+			w.processTask(task)
+		}
+	}
+}
+
+// processTask executes a single task with error handling.
+func (w *Worker) processTask(task Task) {
+	if task == nil {
+		return
 	}
 
-	return worker, nil
+	// Execute task and handle any error.
+	if err := task(); err != nil && w.config.ErrorHandler != nil {
+		w.config.ErrorHandler.HandleError(TaskError{
+			Err:       err,
+			Timestamp: time.Now(),
+		})
+	}
 }
 
-// enqueue passes a task to the worker.
-func (w *Worker) enqueue(task actionTask) error {
-	return w.in(task)
-}
-
-// processor runs the worker goroutine for processing the tasks.
-func (w *Worker) processor(started chan struct{}) {
-	close(started)
-	for atask := range w.out() {
-		action, task := atask()
-		// Check action.
-		switch action {
-		case actionProcess:
-			if err := task(); err != nil {
-				// Handle the error.
-				// TODO: log the error.
-				// Continue with the next task.
-				continue
-			}
-		case actionShutdown:
-			// Shutdown the worker.
-			// TODO: log the shutdown.
+// processPendingTasks processes all remaining tasks during shutdown.
+func (w *Worker) processPendingTasks() {
+	for {
+		select {
+		case task := <-w.taskCh:
+			w.processTask(task)
+		default:
+			// No more tasks.
 			return
 		}
 	}
 }
 
-// -----------------------------------------------------------------------------
-// end of file
-// -----------------------------------------------------------------------------
+// EOF
