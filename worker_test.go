@@ -63,7 +63,7 @@ func TestEnqueueOK(t *testing.T) {
 	verify.NoError(t, err)
 
 	count := 0
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		err = worker.Enqueue(w, func() error {
 			count++
 			return nil
@@ -118,7 +118,7 @@ func TestEnqueueWaitingTimeout(t *testing.T) {
 		return nil
 	})
 	var timeoutErr worker.TimeoutError
-	verify.True(t, errors.As(err, &timeoutErr))
+	verify.AsError(t, err, &timeoutErr)
 
 	err = worker.Stop(w)
 	verify.NoError(t, err)
@@ -162,7 +162,7 @@ func TestAsyncAwaitTimeout(t *testing.T) {
 
 	err = awaiter()
 	var timeoutErr worker.TimeoutError
-	verify.True(t, errors.As(err, &timeoutErr))
+	verify.AsError(t, err, &timeoutErr)
 	verify.Equal(t, timeoutErr.Duration, 10*time.Millisecond)
 
 	err = worker.Stop(w)
@@ -222,7 +222,7 @@ func TestStopTimeout(t *testing.T) {
 	// Stop should timeout.
 	err = worker.Stop(w)
 	var timeoutErr worker.TimeoutError
-	verify.True(t, errors.As(err, &timeoutErr))
+	verify.AsError(t, err, &timeoutErr)
 	verify.Equal(t, timeoutErr.Duration, 50*time.Millisecond)
 }
 
@@ -239,7 +239,7 @@ func TestConcurrentProcessing(t *testing.T) {
 	processed := make([]time.Time, 0, 5)
 	
 	// Enqueue tasks that record their execution time.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		err = worker.Enqueue(w, func() error {
 			start := time.Now()
 			time.Sleep(20 * time.Millisecond) // Small processing time
@@ -313,7 +313,7 @@ func TestEnqueueAfterStop(t *testing.T) {
 		return nil
 	})
 	var shutdownErr worker.ShuttingDownError
-	verify.True(t, errors.As(err, &shutdownErr))
+	verify.AsError(t, err, &shutdownErr)
 }
 
 // EOF
