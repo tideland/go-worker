@@ -61,11 +61,11 @@ func NewWorkerPool(size int, cfg Config) (*WorkerPool, error) {
 	}
 
 	// Create workers
-	for i := 0; i < size; i++ {
+	for i := range size {
 		worker, err := New(cfg)
 		if err != nil {
 			// Clean up already created workers
-			for j := 0; j < i; j++ {
+			for j := range i {
 				_ = pool.workers[j].stop()
 			}
 			return nil, fmt.Errorf("failed to create worker %d: %w", i, err)

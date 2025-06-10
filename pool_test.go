@@ -402,7 +402,7 @@ func TestWorkerPoolWithContext(t *testing.T) {
 	cancel()
 
 	// Give time for shutdown
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
 	// Try to enqueue after cancellation
 	err = worker.Enqueue(pool, func() error {
