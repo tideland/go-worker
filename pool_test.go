@@ -8,12 +8,14 @@
 package worker_test
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"tideland.dev/go/asserts/verify"
 	"tideland.dev/go/worker"
 )
 
@@ -21,40 +23,31 @@ import (
 func TestWorkerPoolCreation(t *testing.T) {
 	// Test with valid size
 	pool, err := worker.NewWorkerPool(5, worker.DefaultConfig())
-	if err != nil {
-		t.Fatalf("Failed to create worker pool: %v", err)
-	}
+	verify.NoError(t, err)
+	verify.NotNil(t, pool)
 	defer worker.Stop(pool)
 
-	if pool.Size() != 5 {
-		t.Errorf("Expected pool size 5, got %d", pool.Size())
-	}
+	verify.Equal(t, pool.Size(), 5)
 
 	// Test with invalid size
 	_, err = worker.NewWorkerPool(0, worker.DefaultConfig())
-	if err == nil {
-		t.Error("Expected error for pool size 0, got nil")
-	}
+	verify.NotNil(t, err)
 
 	_, err = worker.NewWorkerPool(-1, worker.DefaultConfig())
-	if err == nil {
-		t.Error("Expected error for negative pool size, got nil")
-	}
+	verify.NotNil(t, err)
 }
 
 // TestWorkerPoolEnqueue tests basic task enqueueing to the pool.
 func TestWorkerPoolEnqueue(t *testing.T) {
 	pool, err := worker.NewWorkerPool(3, worker.DefaultConfig())
-	if err != nil {
-		t.Fatalf("Failed to create worker pool: %v", err)
-	}
+	verify.NoError(t, err)
 	defer worker.Stop(pool)
 
 	executed := atomic.Int32{}
 	var wg sync.WaitGroup
 
 	// Enqueue multiple tasks
-	for i := range 10 {
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		task := func() error {
 			executed.Add(1)
@@ -64,25 +57,21 @@ func TestWorkerPoolEnqueue(t *testing.T) {
 
 		err := worker.Enqueue(pool, task)
 		if err != nil {
-			t.Errorf("Failed to enqueue task %d: %v", i, err)
 			wg.Done()
 		}
+		verify.NoError(t, err)
 	}
 
 	// Wait for all tasks to complete
 	wg.Wait()
 
-	if executed.Load() != 10 {
-		t.Errorf("Expected 10 tasks executed, got %d", executed.Load())
-	}
+	verify.Equal(t, executed.Load(), int32(10))
 }
 
 // TestWorkerPoolEnqueueWaiting tests synchronous task execution.
 func TestWorkerPoolEnqueueWaiting(t *testing.T) {
 	pool, err := worker.NewWorkerPool(2, worker.DefaultConfig())
-	if err != nil {
-		t.Fatalf("Failed to create worker pool: %v", err)
-	}
+	verify.NoError(t, err)
 	defer worker.Stop(pool)
 
 	// Test successful task
@@ -93,17 +82,13 @@ func TestWorkerPoolEnqueueWaiting(t *testing.T) {
 	}
 
 	err = worker.EnqueueWaiting(pool, task)
-	if err != nil {
-		t.Errorf("Failed to enqueue waiting task: %v", err)
-	}
+	verify.NoError(t, err)
 
 	select {
 	case val := <-result:
-		if val != 42 {
-			t.Errorf("Expected result 42, got %d", val)
-		}
+		verify.Equal(t, val, 42)
 	default:
-		t.Error("Task was not executed")
+		t.Fatal("Task was not executed")
 	}
 
 	// Test task with error
@@ -113,18 +98,14 @@ func TestWorkerPoolEnqueueWaiting(t *testing.T) {
 	}
 
 	err = worker.EnqueueWaiting(pool, errorTask)
-	if err != taskErr {
-		t.Errorf("Expected error %v, got %v", taskErr, err)
-	}
+	verify.Equal(t, err, taskErr)
 }
 
 // TestWorkerPoolDistribution tests that tasks are distributed across workers.
 func TestWorkerPoolDistribution(t *testing.T) {
 	poolSize := 4
 	pool, err := worker.NewWorkerPool(poolSize, worker.DefaultConfig())
-	if err != nil {
-		t.Fatalf("Failed to create worker pool: %v", err)
-	}
+	verify.NoError(t, err)
 	defer worker.Stop(pool)
 
 	// Track task execution
@@ -134,7 +115,7 @@ func TestWorkerPoolDistribution(t *testing.T) {
 	// Enqueue many tasks to ensure distribution
 	numTasks := 100
 
-	for i := range numTasks {
+	for i := 0; i < numTasks; i++ {
 		wg.Add(1)
 		task := func() error {
 			executed.Add(1)
@@ -145,30 +126,26 @@ func TestWorkerPoolDistribution(t *testing.T) {
 
 		err := worker.Enqueue(pool, task)
 		if err != nil {
-			t.Errorf("Failed to enqueue task %d: %v", i, err)
 			wg.Done()
 		}
+		verify.NoError(t, err)
 	}
 
 	wg.Wait()
 
-	if executed.Load() != int32(numTasks) {
-		t.Errorf("Expected %d tasks executed, got %d", numTasks, executed.Load())
-	}
+	verify.Equal(t, executed.Load(), int32(numTasks))
 }
 
 // TestWorkerPoolStop tests graceful shutdown of the pool.
 func TestWorkerPoolStop(t *testing.T) {
 	pool, err := worker.NewWorkerPool(2, worker.DefaultConfig())
-	if err != nil {
-		t.Fatalf("Failed to create worker pool: %v", err)
-	}
+	verify.NoError(t, err)
 
 	executed := atomic.Int32{}
 	var wg sync.WaitGroup
 
 	// Enqueue tasks that take some time
-	for i := range 5 {
+	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		task := func() error {
 			time.Sleep(50 * time.Millisecond)
@@ -179,30 +156,26 @@ func TestWorkerPoolStop(t *testing.T) {
 
 		err := worker.Enqueue(pool, task)
 		if err != nil {
-			t.Errorf("Failed to enqueue task %d: %v", i, err)
 			wg.Done()
 		}
+		verify.NoError(t, err)
 	}
 
 	// Stop the pool
 	err = worker.Stop(pool)
-	if err != nil {
-		t.Errorf("Failed to stop pool: %v", err)
-	}
+	verify.NoError(t, err)
 
 	// Wait to ensure all tasks completed
 	wg.Wait()
 
 	// All tasks should have been executed
-	if executed.Load() != 5 {
-		t.Errorf("Expected 5 tasks executed before stop, got %d", executed.Load())
-	}
+	verify.Equal(t, executed.Load(), int32(5))
 
 	// Try to enqueue after stop
 	err = worker.Enqueue(pool, func() error { return nil })
-	if err == nil {
-		t.Error("Expected error when enqueueing to stopped pool")
-	}
+	verify.NotNil(t, err)
+	var shutdownErr worker.ShuttingDownError
+	verify.AsError(t, err, &shutdownErr)
 }
 
 // TestWorkProcessorInterface tests the WorkProcessor interface with both Worker and WorkerPool.
@@ -216,40 +189,30 @@ func TestWorkProcessorInterface(t *testing.T) {
 			executed.Add(1)
 			return nil
 		})
-		if err != nil {
-			t.Errorf("%s: Failed to enqueue task: %v", name, err)
-		}
+		verify.NoError(t, err)
 
 		// Test EnqueueWaiting
 		err = worker.EnqueueWaiting(wp, func() error {
 			executed.Add(1)
 			return nil
 		})
-		if err != nil {
-			t.Errorf("%s: Failed to enqueue waiting task: %v", name, err)
-		}
+		verify.NoError(t, err)
 
 		// Give time for async task to complete
 		time.Sleep(100 * time.Millisecond)
 
-		if executed.Load() != 2 {
-			t.Errorf("%s: Expected 2 tasks executed, got %d", name, executed.Load())
-		}
+		verify.Equal(t, executed.Load(), int32(2))
 	}
 
 	// Test with single Worker
 	w, err := worker.New(worker.DefaultConfig())
-	if err != nil {
-		t.Fatalf("Failed to create worker: %v", err)
-	}
+	verify.NoError(t, err)
 	defer worker.Stop(w)
 	testProcessor(w, "Worker")
 
 	// Test with WorkerPool
 	pool, err := worker.NewWorkerPool(3, worker.DefaultConfig())
-	if err != nil {
-		t.Fatalf("Failed to create worker pool: %v", err)
-	}
+	verify.NoError(t, err)
 	defer worker.Stop(pool)
 	testProcessor(pool, "WorkerPool")
 }
@@ -261,7 +224,7 @@ func TestPolymorphicUsage(t *testing.T) {
 		executed := atomic.Int32{}
 		var wg sync.WaitGroup
 
-		for range taskCount {
+		for i := 0; i < taskCount; i++ {
 			wg.Add(1)
 			err := worker.Enqueue(wp, func() error {
 				executed.Add(1)
@@ -280,33 +243,21 @@ func TestPolymorphicUsage(t *testing.T) {
 
 	// Test with Worker
 	w, err := worker.New(worker.DefaultConfig())
-	if err != nil {
-		t.Fatalf("Failed to create worker: %v", err)
-	}
+	verify.NoError(t, err)
 	defer worker.Stop(w)
 
 	count, err := processTasks(w, 5)
-	if err != nil {
-		t.Errorf("Worker: Failed to process tasks: %v", err)
-	}
-	if count != 5 {
-		t.Errorf("Worker: Expected 5 tasks executed, got %d", count)
-	}
+	verify.NoError(t, err)
+	verify.Equal(t, count, int32(5))
 
 	// Test with WorkerPool
 	pool, err := worker.NewWorkerPool(3, worker.DefaultConfig())
-	if err != nil {
-		t.Fatalf("Failed to create worker pool: %v", err)
-	}
+	verify.NoError(t, err)
 	defer worker.Stop(pool)
 
 	count, err = processTasks(pool, 10)
-	if err != nil {
-		t.Errorf("WorkerPool: Failed to process tasks: %v", err)
-	}
-	if count != 10 {
-		t.Errorf("WorkerPool: Expected 10 tasks executed, got %d", count)
-	}
+	verify.NoError(t, err)
+	verify.Equal(t, count, int32(10))
 }
 
 // TestEnqueueAwaiting tests the EnqueueAwaiting function with both Worker and WorkerPool.
@@ -318,52 +269,39 @@ func TestEnqueueAwaiting(t *testing.T) {
 			result = 123
 			return nil
 		}, 2*time.Second)
-		if err != nil {
-			t.Errorf("%s: Failed to enqueue awaiting task: %v", name, err)
-			return
-		}
+		verify.NoError(t, err)
 
 		// Do other work...
 		time.Sleep(50 * time.Millisecond)
 
 		// Now wait for the result
 		err = awaiter()
-		if err != nil {
-			t.Errorf("%s: Awaiter returned error: %v", name, err)
-		}
-		if result != 123 {
-			t.Errorf("%s: Expected result 123, got %d", name, result)
-		}
+		verify.NoError(t, err)
+		verify.Equal(t, result, 123)
 
 		// Test timeout
 		awaiter, err = worker.EnqueueAwaiting(wp, func() error {
 			time.Sleep(200 * time.Millisecond)
 			return nil
 		}, 100*time.Millisecond)
-		if err != nil {
-			t.Errorf("%s: Failed to enqueue awaiting task: %v", name, err)
-			return
-		}
+		verify.NoError(t, err)
 
 		err = awaiter()
-		if err == nil {
-			t.Errorf("%s: Expected timeout error, got nil", name)
-		}
+		verify.NotNil(t, err)
+		var timeoutErr worker.TimeoutError
+		verify.AsError(t, err, &timeoutErr)
+		verify.Equal(t, timeoutErr.Duration, 100*time.Millisecond)
 	}
 
 	// Test with Worker
 	w, err := worker.New(worker.DefaultConfig())
-	if err != nil {
-		t.Fatalf("Failed to create worker: %v", err)
-	}
+	verify.NoError(t, err)
 	defer worker.Stop(w)
 	testAwaiting(w, "Worker")
 
 	// Test with WorkerPool
 	pool, err := worker.NewWorkerPool(2, worker.DefaultConfig())
-	if err != nil {
-		t.Fatalf("Failed to create worker pool: %v", err)
-	}
+	verify.NoError(t, err)
 	defer worker.Stop(pool)
 	testAwaiting(pool, "WorkerPool")
 }
@@ -372,11 +310,9 @@ func TestEnqueueAwaiting(t *testing.T) {
 func TestWorkerPoolWithCustomConfig(t *testing.T) {
 	// Create custom error handler
 	errorCount := atomic.Int32{}
-	errorHandler := &testErrorHandler{
-		handler: func(err worker.TaskError) {
-			errorCount.Add(1)
-		},
-	}
+	errorHandler := worker.NewDefaultErrorHandler(func(err worker.TaskError) {
+		errorCount.Add(1)
+	})
 
 	// Create config with custom settings
 	cfg := worker.Config{
@@ -387,36 +323,93 @@ func TestWorkerPoolWithCustomConfig(t *testing.T) {
 	}
 
 	pool, err := worker.NewWorkerPool(3, cfg)
-	if err != nil {
-		t.Fatalf("Failed to create worker pool with custom config: %v", err)
-	}
+	verify.NoError(t, err)
 	defer worker.Stop(pool)
 
 	// Enqueue tasks that fail
-	for i := range 5 {
+	for i := 0; i < 5; i++ {
 		err := worker.Enqueue(pool, func() error {
 			return fmt.Errorf("task error %d", i)
 		})
-		if err != nil {
-			t.Errorf("Failed to enqueue task %d: %v", i, err)
-		}
+		verify.NoError(t, err)
 	}
 
 	// Wait for error handling
 	time.Sleep(200 * time.Millisecond)
 
-	if errorCount.Load() != 5 {
-		t.Errorf("Expected 5 errors handled, got %d", errorCount.Load())
+	verify.Equal(t, errorCount.Load(), int32(5))
+}
+
+// TestWorkerPoolConcurrentEnqueue tests concurrent enqueueing to the pool.
+func TestWorkerPoolConcurrentEnqueue(t *testing.T) {
+	pool, err := worker.NewWorkerPool(5, worker.DefaultConfig())
+	verify.NoError(t, err)
+	defer worker.Stop(pool)
+
+	executed := atomic.Int32{}
+	var wg sync.WaitGroup
+
+	// Start multiple goroutines enqueueing tasks
+	numGoroutines := 10
+	tasksPerGoroutine := 10
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < tasksPerGoroutine; j++ {
+				err := worker.Enqueue(pool, func() error {
+					executed.Add(1)
+					return nil
+				})
+				verify.NoError(t, err)
+			}
+		}(i)
 	}
+
+	wg.Wait()
+
+	// Wait for all tasks to complete
+	time.Sleep(200 * time.Millisecond)
+
+	verify.Equal(t, executed.Load(), int32(numGoroutines*tasksPerGoroutine))
 }
 
-// testErrorHandler implements ErrorHandler for testing.
-type testErrorHandler struct {
-	handler func(worker.TaskError)
-}
+// TestWorkerPoolWithContext tests pool creation with context cancellation.
+func TestWorkerPoolWithContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := worker.Config{
+		Context: ctx,
+	}
 
-func (h *testErrorHandler) HandleError(err worker.TaskError) {
-	h.handler(err)
+	pool, err := worker.NewWorkerPool(2, cfg)
+	verify.NoError(t, err)
+
+	executed := atomic.Int32{}
+
+	// Enqueue a task
+	err = worker.Enqueue(pool, func() error {
+		executed.Add(1)
+		return nil
+	})
+	verify.NoError(t, err)
+
+	// Give task time to execute
+	time.Sleep(50 * time.Millisecond)
+	verify.Equal(t, executed.Load(), int32(1))
+
+	// Cancel context
+	cancel()
+
+	// Give time for shutdown
+	time.Sleep(50 * time.Millisecond)
+
+	// Try to enqueue after cancellation
+	err = worker.Enqueue(pool, func() error {
+		executed.Add(1)
+		return nil
+	})
+	verify.NotNil(t, err)
 }
 
 // BenchmarkWorkerPoolEnqueue benchmarks task enqueueing performance.
@@ -432,7 +425,8 @@ func BenchmarkWorkerPoolEnqueue(b *testing.B) {
 		return nil
 	}
 
-	for b.Loop() {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
 		err := worker.Enqueue(pool, task)
 		if err != nil {
 			b.Fatalf("Failed to enqueue task: %v", err)
@@ -455,7 +449,7 @@ func BenchmarkWorkerPoolVsSingleWorker(b *testing.B) {
 		}
 
 		b.ResetTimer()
-		for b.Loop() {
+		for i := 0; i < b.N; i++ {
 			_ = worker.Enqueue(w, task)
 		}
 	})
@@ -473,7 +467,7 @@ func BenchmarkWorkerPoolVsSingleWorker(b *testing.B) {
 		}
 
 		b.ResetTimer()
-		for b.Loop() {
+		for i := 0; i < b.N; i++ {
 			_ = worker.Enqueue(pool, task)
 		}
 	})
