@@ -1,8 +1,9 @@
-// -----------------------------------------------------------------------------
-// worker for running tasks enqueued in background - tests
+// Tideland Go Worker - Tests
 //
-// Copyright (C) 2024-2025 Frank Mueller / Oldenburg / Germany / World
-// -----------------------------------------------------------------------------
+// Copyright (C) 2014-2025 Frank Mueller / Tideland / Oldenburg / Germany
+//
+// All rights reserved. Use of this source code is governed
+// by the new BSD license.
 
 package worker_test
 
@@ -237,7 +238,7 @@ func TestConcurrentProcessing(t *testing.T) {
 
 	var mu sync.Mutex
 	processed := make([]time.Time, 0, 5)
-	
+
 	// Enqueue tasks that record their execution time.
 	for range 5 {
 		err = worker.Enqueue(w, func() error {
@@ -259,7 +260,7 @@ func TestConcurrentProcessing(t *testing.T) {
 
 	// Verify all tasks were processed.
 	verify.Equal(t, len(processed), 5)
-	
+
 	// Tasks should be processed sequentially (one at a time).
 	// The time difference between task starts should be at least their processing time.
 	for i := 1; i < len(processed); i++ {

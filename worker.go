@@ -1,8 +1,9 @@
-// -----------------------------------------------------------------------------
-// worker for running tasks enqueued in background - worker
+// Tideland Go Worker - Worker
 //
-// Copyright (C) 2024-2025 Frank Mueller / Oldenburg / Germany / World
-// -----------------------------------------------------------------------------
+// Copyright (C) 2014-2025 Frank Mueller / Tideland / Oldenburg / Germany
+//
+// All rights reserved. Use of this source code is governed
+// by the new BSD license.
 
 package worker
 
@@ -14,7 +15,7 @@ import (
 
 // Worker is a simple configurable task queue that processes tasks in background.
 type Worker struct {
-	config Config
+	cfg    Config
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -43,7 +44,7 @@ func New(cfg Config) (*Worker, error) {
 
 	// Create worker.
 	w := &Worker{
-		config:  cfg,
+		cfg:     cfg,
 		ctx:     ctx,
 		cancel:  cancel,
 		taskCh:  make(chan Task, cfg.Burst),
@@ -72,8 +73,8 @@ func (w *Worker) enqueue(task Task) error {
 		return ShuttingDownError{}
 	case w.taskCh <- task:
 		return nil
-	case <-time.After(w.config.Timeout):
-		return TimeoutError{Duration: w.config.Timeout}
+	case <-time.After(w.cfg.Timeout):
+		return TimeoutError{Duration: w.cfg.Timeout}
 	}
 }
 
@@ -93,9 +94,9 @@ func (w *Worker) stop() error {
 		select {
 		case <-w.done:
 			// Clean shutdown.
-		case <-time.After(w.config.ShutdownTimeout):
+		case <-time.After(w.cfg.ShutdownTimeout):
 			// Timeout during shutdown.
-			err = TimeoutError{Duration: w.config.ShutdownTimeout}
+			err = TimeoutError{Duration: w.cfg.ShutdownTimeout}
 		}
 	})
 	return err
@@ -126,8 +127,8 @@ func (w *Worker) processTask(task Task) {
 	}
 
 	// Execute task and handle any error.
-	if err := task(); err != nil && w.config.ErrorHandler != nil {
-		w.config.ErrorHandler.HandleError(TaskError{
+	if err := task(); err != nil && w.cfg.ErrorHandler != nil {
+		w.cfg.ErrorHandler.HandleError(TaskError{
 			Err:       err,
 			Timestamp: time.Now(),
 		})

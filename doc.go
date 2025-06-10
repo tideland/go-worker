@@ -1,8 +1,9 @@
-// -----------------------------------------------------------------------------
-// worker for running tasks enqueued in background - documentation
+// Tideland Go Worker
 //
-// Copyright (C) 2024-2025 Frank Mueller / Oldenburg / Germany / World
-// -----------------------------------------------------------------------------
+// Copyright (C) 2014-2025 Frank Mueller / Tideland / Oldenburg / Germany
+//
+// All rights reserved. Use of this source code is governed
+// by the new BSD license.
 
 // Package worker provides a simple configurable task queue that processes
 // tasks in the background. The worker processes tasks in FIFO order with
