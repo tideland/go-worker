@@ -7,7 +7,7 @@
 
 ## Description
 
-Handle synchronous and asynchronous tasks enqueued in the background using individual workers or worker pools.
+Handle synchronous and asynchronous tasks enqueued in the background using individual workers or worker pools. The worker package provides a simple configurable task queue that processes tasks in the background. Workers process tasks in FIFO order with configurable rate limiting.
 
 ### Features
 
@@ -20,24 +20,65 @@ Handle synchronous and asynchronous tasks enqueued in the background using indiv
 
 ## Usage
 
-### Single Worker
+### Creating a Worker
 
 ```go
-// Create a worker
-w, err := worker.New(worker.DefaultConfig())
+// Create a worker with custom configuration
+w, err := worker.New(worker.Config{
+    Rate:    10,               // 10 tasks per second
+    Burst:   5,                // Buffer up to 5 tasks
+    Timeout: time.Second,      // 1 second timeout for operations
+})
 if err != nil {
     log.Fatal(err)
 }
 defer worker.Stop(w)
+```
 
-// Enqueue tasks
-worker.Enqueue(w, func() error {
-    fmt.Println("Task executed")
+### Enqueue Tasks
+
+All operations are performed through command functions:
+
+#### Enqueue a task for background processing:
+
+```go
+err := worker.Enqueue(w, func() error {
+    // Do work
     return nil
 })
 ```
 
+#### Enqueue and wait for completion:
+
+```go
+err := worker.EnqueueWaiting(w, func() error {
+    // Do work synchronously
+    return nil
+})
+```
+
+#### Enqueue and get an awaiter for later completion checking:
+
+```go
+awaiter, err := worker.AsyncAwait(w, func() error {
+    // Do work
+    return nil
+}, 5*time.Second)
+// Do other work...
+err = awaiter() // Wait for completion
+```
+
+### Stop the Worker
+
+```go
+err := worker.Stop(w)
+```
+
+The worker will process all pending tasks before stopping. Error handling can be customized through the ErrorHandler in the configuration.
+
 ### Worker Pool
+
+Create and use a pool of workers for parallel task processing:
 
 ```go
 // Create a pool with 5 workers
@@ -86,6 +127,34 @@ pool, _ := worker.NewWorkerPool(5, worker.DefaultConfig())
 processTasksWithAnyProcessor(pool)
 ```
 
+### Configuration Options
+
+The `Config` struct allows you to customize worker behavior:
+
+```go
+type Config struct {
+    Rate         int                    // Tasks per second (0 = unlimited)
+    Burst        int                    // Maximum burst size for rate limiter
+    Timeout      time.Duration          // Timeout for operations
+    ErrorHandler func(error)            // Custom error handler (optional)
+}
+```
+
+Use `worker.DefaultConfig()` for sensible defaults.
+
+### Error Handling
+
+By default, errors are logged. You can provide a custom error handler:
+
+```go
+cfg := worker.DefaultConfig()
+cfg.ErrorHandler = func(err error) {
+    // Custom error handling logic
+    log.Printf("Task error: %v", err)
+}
+w, _ := worker.New(cfg)
+```
+
 ### Choosing Between Worker and WorkerPool
 
 - Use a **single Worker** when:
@@ -97,6 +166,88 @@ processTasksWithAnyProcessor(pool)
   - Tasks can be processed in parallel
   - Higher throughput is needed
   - You have CPU-bound or I/O-bound tasks that benefit from concurrency
+
+## Examples
+
+### Basic Task Processing
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+    "time"
+
+    "tideland.dev/go/worker"
+)
+
+func main() {
+    // Create worker
+    w, err := worker.New(worker.DefaultConfig())
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer worker.Stop(w)
+
+    // Enqueue some tasks
+    for i := 0; i < 10; i++ {
+        taskNum := i
+        worker.Enqueue(w, func() error {
+            fmt.Printf("Processing task %d\n", taskNum)
+            time.Sleep(100 * time.Millisecond)
+            return nil
+        })
+    }
+
+    // Wait a bit for tasks to complete
+    time.Sleep(2 * time.Second)
+}
+```
+
+### Parallel Processing with Worker Pool
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+    "sync/atomic"
+    "time"
+
+    "tideland.dev/go/worker"
+)
+
+func main() {
+    // Create a pool with 3 workers
+    pool, err := worker.NewWorkerPool(3, worker.DefaultConfig())
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer worker.Stop(pool)
+
+    var completed int32
+
+    // Enqueue 20 tasks
+    for i := 0; i < 20; i++ {
+        taskNum := i
+        worker.Enqueue(pool, func() error {
+            fmt.Printf("Worker processing task %d\n", taskNum)
+            time.Sleep(500 * time.Millisecond)
+            atomic.AddInt32(&completed, 1)
+            return nil
+        })
+    }
+
+    // Wait for all tasks to complete
+    for atomic.LoadInt32(&completed) < 20 {
+        time.Sleep(100 * time.Millisecond)
+    }
+
+    fmt.Println("All tasks completed!")
+}
+```
 
 ## Contributors
 
