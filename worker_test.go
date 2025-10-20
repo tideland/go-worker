@@ -1,6 +1,6 @@
 // Tideland Go Worker - Tests
 //
-// Copyright (C) 2014-2025 Frank Mueller / Tideland / Oldenburg / Germany
+// Copyright (C) 2014-2025 Frank Mueller / Tideland / Germany
 //
 // All rights reserved. Use of this source code is governed
 // by the new BSD license.
@@ -317,4 +317,3 @@ func TestEnqueueAfterStop(t *testing.T) {
 	verify.AsError(t, err, &shutdownErr)
 }
 
-// EOF

@@ -1,6 +1,6 @@
 // Tideland Go Worker - Errors
 //
-// Copyright (C) 2014-2025 Frank Mueller / Tideland / Oldenburg / Germany
+// Copyright (C) 2014-2025 Frank Mueller / Tideland / Germany
 //
 // All rights reserved. Use of this source code is governed
 // by the new BSD license.
@@ -72,4 +72,3 @@ func (h *DefaultErrorHandler) HandleError(err TaskError) {
 	}
 }
 
-// EOF

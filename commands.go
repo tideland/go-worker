@@ -1,6 +1,6 @@
 // Tideland Go Worker - Commands
 //
-// Copyright (C) 2014-2025 Frank Mueller / Tideland / Oldenburg / Germany
+// Copyright (C) 2014-2025 Frank Mueller / Tideland / Germany
 //
 // All rights reserved. Use of this source code is governed
 // by the new BSD license.
@@ -91,4 +91,3 @@ func Stop(wp WorkProcessor) error {
 	return wp.stop()
 }
 
-// EOF

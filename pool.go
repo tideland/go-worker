@@ -1,6 +1,6 @@
 // Tideland Go Worker - Worker Pool
 //
-// Copyright (C) 2014-2025 Frank Mueller / Tideland / Oldenburg / Germany
+// Copyright (C) 2014-2025 Frank Mueller / Tideland / Germany
 //
 // All rights reserved. Use of this source code is governed
 // by the new BSD license.
@@ -153,4 +153,3 @@ func (w *Worker) config() Config {
 // Ensure WorkerPool implements WorkProcessor
 var _ WorkProcessor = (*WorkerPool)(nil)
 
-// EOF

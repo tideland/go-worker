@@ -1,6 +1,6 @@
 // Tideland Go Worker - Worker Pool Tests
 //
-// Copyright (C) 2014-2025 Frank Mueller / Tideland / Oldenburg / Germany
+// Copyright (C) 2014-2025 Frank Mueller / Tideland / Germany
 //
 // All rights reserved. Use of this source code is governed
 // by the new BSD license.
@@ -473,4 +473,3 @@ func BenchmarkWorkerPoolVsSingleWorker(b *testing.B) {
 	})
 }
 
-// EOF
