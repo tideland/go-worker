@@ -15,7 +15,7 @@ import (
 
 // Worker is a simple configurable task queue that processes tasks in background.
 type Worker struct {
-	cfg    Config
+	cfg    *Config
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -28,26 +28,26 @@ type Worker struct {
 
 // New creates and starts a new worker with the given configuration.
 // If no configuration is provided, default configuration is used.
-func New(cfg Config) (*Worker, error) {
-	// Handle empty configuration.
-	if (Config{}) == cfg {
+func New(cfg *Config) (*Worker, error) {
+	// Handle nil configuration.
+	if cfg == nil {
 		cfg = DefaultConfig()
 	}
 
-	// Validate configuration.
+	// Validate configuration (checks for any accumulated errors).
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
 	// Create worker context.
-	ctx, cancel := context.WithCancel(cfg.Context)
+	ctx, cancel := context.WithCancel(cfg.Context())
 
 	// Create worker.
 	w := &Worker{
 		cfg:     cfg,
 		ctx:     ctx,
 		cancel:  cancel,
-		taskCh:  make(chan Task, cfg.Burst),
+		taskCh:  make(chan Task, cfg.Burst()),
 		done:    make(chan struct{}),
 		running: true,
 	}
@@ -73,8 +73,8 @@ func (w *Worker) enqueue(task Task) error {
 		return ShuttingDownError{}
 	case w.taskCh <- task:
 		return nil
-	case <-time.After(w.cfg.Timeout):
-		return TimeoutError{Duration: w.cfg.Timeout}
+	case <-time.After(w.cfg.Timeout()):
+		return TimeoutError{Duration: w.cfg.Timeout()}
 	}
 }
 
@@ -94,9 +94,9 @@ func (w *Worker) stop() error {
 		select {
 		case <-w.done:
 			// Clean shutdown.
-		case <-time.After(w.cfg.ShutdownTimeout):
+		case <-time.After(w.cfg.ShutdownTimeout()):
 			// Timeout during shutdown.
-			err = TimeoutError{Duration: w.cfg.ShutdownTimeout}
+			err = TimeoutError{Duration: w.cfg.ShutdownTimeout()}
 		}
 	})
 	return err
@@ -127,8 +127,8 @@ func (w *Worker) processTask(task Task) {
 	}
 
 	// Execute task and handle any error.
-	if err := task(); err != nil && w.cfg.ErrorHandler != nil {
-		w.cfg.ErrorHandler.HandleError(TaskError{
+	if err := task(); err != nil && w.cfg.ErrorHandler() != nil {
+		w.cfg.ErrorHandler().HandleError(TaskError{
 			Err:       err,
 			Timestamp: time.Now(),
 		})
@@ -147,4 +147,3 @@ func (w *Worker) processPendingTasks() {
 		}
 	}
 }
-

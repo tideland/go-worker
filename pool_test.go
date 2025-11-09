@@ -37,6 +37,22 @@ func TestWorkerPoolCreation(t *testing.T) {
 	verify.NotNil(t, err)
 }
 
+// TestWorkerPoolWithInvalidConfig verifies NewWorkerPool checks for configuration errors.
+func TestWorkerPoolWithInvalidConfig(t *testing.T) {
+	// Create invalid config but don't check cfg.Error()
+	cfg := worker.NewConfig(context.Background()).
+		SetRate(-10).
+		SetBurst(-5).
+		SetTimeout(-time.Second)
+
+	// NewWorkerPool() should still catch the errors
+	_, err := worker.NewWorkerPool(3, cfg)
+	verify.Error(t, err)
+	verify.ErrorContains(t, err, "rate must be positive")
+	verify.ErrorContains(t, err, "burst must be positive")
+	verify.ErrorContains(t, err, "timeout must be positive")
+}
+
 // TestWorkerPoolEnqueue tests basic task enqueueing to the pool.
 func TestWorkerPoolEnqueue(t *testing.T) {
 	pool, err := worker.NewWorkerPool(3, worker.DefaultConfig())
@@ -315,12 +331,13 @@ func TestWorkerPoolWithCustomConfig(t *testing.T) {
 	})
 
 	// Create config with custom settings
-	cfg := worker.Config{
-		Rate:         10,
-		Burst:        20,
-		Timeout:      2 * time.Second,
-		ErrorHandler: errorHandler,
-	}
+	cfg := worker.NewConfig(context.Background()).
+		SetRate(10).
+		SetBurst(20).
+		SetTimeout(2 * time.Second).
+		SetErrorHandler(errorHandler)
+
+	verify.NoError(t, cfg.Error())
 
 	pool, err := worker.NewWorkerPool(3, cfg)
 	verify.NoError(t, err)
@@ -378,9 +395,7 @@ func TestWorkerPoolConcurrentEnqueue(t *testing.T) {
 // TestWorkerPoolWithContext tests pool creation with context cancellation.
 func TestWorkerPoolWithContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	cfg := worker.Config{
-		Context: ctx,
-	}
+	cfg := worker.NewConfig(ctx)
 
 	pool, err := worker.NewWorkerPool(2, cfg)
 	verify.NoError(t, err)
@@ -472,4 +487,3 @@ func BenchmarkWorkerPoolVsSingleWorker(b *testing.B) {
 		}
 	})
 }
-

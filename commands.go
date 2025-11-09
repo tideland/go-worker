@@ -37,8 +37,8 @@ func EnqueueWaiting(wp WorkProcessor, task Task) error {
 	select {
 	case err := <-done:
 		return err
-	case <-time.After(wp.config().Timeout):
-		return TimeoutError{Duration: wp.config().Timeout}
+	case <-time.After(wp.config().Timeout()):
+		return TimeoutError{Duration: wp.config().Timeout()}
 	}
 }
 
@@ -90,4 +90,3 @@ func EnqueueAwaiting(wp WorkProcessor, task Task, timeout time.Duration) (Awaite
 func Stop(wp WorkProcessor) error {
 	return wp.stop()
 }
-

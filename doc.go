@@ -21,19 +21,29 @@
 //
 // Creating a Single Worker:
 //
-//	w, err := worker.New(worker.Config{
-//		Rate:    10,               // 10 tasks per second
-//		Burst:   5,                // Buffer up to 5 tasks
-//		Timeout: time.Second,      // 1 second timeout for operations
-//	})
+//	cfg := worker.NewConfig(context.Background()).
+//		SetRate(10).               // 10 tasks per second
+//		SetBurst(5).               // Buffer up to 5 tasks
+//		SetTimeout(time.Second)    // 1 second timeout for operations
+//
+//	if err := cfg.Error(); err != nil {
+//		// Handle configuration errors
+//	}
+//
+//	w, err := worker.New(cfg)
 //
 // Creating a Worker Pool:
 //
-//	pool, err := worker.NewWorkerPool(5, worker.Config{
-//		Rate:    10,               // 10 tasks per second per worker
-//		Burst:   5,                // Buffer up to 5 tasks per worker
-//		Timeout: time.Second,      // 1 second timeout for operations
-//	})
+//	cfg := worker.NewConfig(context.Background()).
+//		SetRate(10).               // 10 tasks per second per worker
+//		SetBurst(5).               // Buffer up to 5 tasks per worker
+//		SetTimeout(time.Second)    // 1 second timeout for operations
+//
+//	if err := cfg.Error(); err != nil {
+//		// Handle configuration errors
+//	}
+//
+//	pool, err := worker.NewWorkerPool(5, cfg)
 //
 // All operations are performed through command functions that work with
 // both Worker and WorkerPool via the WorkProcessor interface:
@@ -80,5 +90,4 @@
 //   - Higher throughput is needed
 //   - You have CPU-bound or I/O-bound tasks that benefit from concurrency
 
-package worker // import "tideland.dev/go/worker"
-
+package worker

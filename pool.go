@@ -23,7 +23,7 @@ type WorkProcessor interface {
 	stop() error
 
 	// config returns the configuration of the processor.
-	config() Config
+	config() *Config
 }
 
 // WorkerPool manages a pool of workers for parallel task processing.
@@ -34,22 +34,22 @@ type WorkerPool struct {
 	mu       sync.RWMutex
 	stopped  bool
 	stopOnce sync.Once
-	cfg      Config
+	cfg      *Config
 }
 
 // NewWorkerPool creates a new worker pool with the specified size and configuration.
 // Each worker in the pool is created with the provided configuration.
-func NewWorkerPool(size int, cfg Config) (*WorkerPool, error) {
+func NewWorkerPool(size int, cfg *Config) (*WorkerPool, error) {
 	if size <= 0 {
 		return nil, fmt.Errorf("pool size must be positive, got %d", size)
 	}
 
-	// Handle empty configuration.
-	if (Config{}) == cfg {
+	// Handle nil configuration.
+	if cfg == nil {
 		cfg = DefaultConfig()
 	}
 
-	// Validate configuration.
+	// Validate configuration (checks for any accumulated errors).
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (p *WorkerPool) stop() error {
 }
 
 // config returns the configuration of the worker pool.
-func (p *WorkerPool) config() Config {
+func (p *WorkerPool) config() *Config {
 	return p.cfg
 }
 
@@ -146,10 +146,9 @@ var _ WorkProcessor = (*Worker)(nil)
 
 // config returns the configuration of the worker.
 // This method makes Worker implement the WorkProcessor interface.
-func (w *Worker) config() Config {
+func (w *Worker) config() *Config {
 	return w.cfg
 }
 
 // Ensure WorkerPool implements WorkProcessor
 var _ WorkProcessor = (*WorkerPool)(nil)
-
