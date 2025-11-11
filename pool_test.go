@@ -198,6 +198,7 @@ func TestWorkerPoolStop(t *testing.T) {
 func TestWorkProcessorInterface(t *testing.T) {
 	// Test function that works with any WorkProcessor
 	testProcessor := func(wp worker.WorkProcessor, name string) {
+		t.Logf("Testing %s as WorkProcessor", name)
 		executed := atomic.Int32{}
 
 		// Test Enqueue
@@ -279,6 +280,7 @@ func TestPolymorphicUsage(t *testing.T) {
 // TestEnqueueAwaiting tests the EnqueueAwaiting function with both Worker and WorkerPool.
 func TestEnqueueAwaiting(t *testing.T) {
 	testAwaiting := func(wp worker.WorkProcessor, name string) {
+		t.Logf("Testing EnqueueAwaiting with %s", name)
 		// Test successful task
 		result := 0
 		awaiter, err := worker.EnqueueAwaiting(wp, func() error {
