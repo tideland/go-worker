@@ -442,8 +442,7 @@ func BenchmarkWorkerPoolEnqueue(b *testing.B) {
 		return nil
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := worker.Enqueue(pool, task)
 		if err != nil {
 			b.Fatalf("Failed to enqueue task: %v", err)

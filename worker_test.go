@@ -10,6 +10,7 @@ package worker_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -397,4 +398,228 @@ func TestConfigChaining(t *testing.T) {
 	verify.ErrorContains(t, err, "burst must be positive")
 	verify.ErrorContains(t, err, "timeout must be positive")
 	verify.ErrorContains(t, err, "shutdown timeout must be positive")
+}
+
+// TestWaitForTasks verifies waiting for all tasks to complete.
+func TestWaitForTasks(t *testing.T) {
+	cfg := worker.NewConfig(context.Background()).
+		SetRate(10).
+		SetBurst(100)
+
+	w, err := worker.New(cfg)
+	verify.NoError(t, err)
+	defer worker.Stop(w)
+
+	// Track task completion
+	tasksCompleted := &sync.WaitGroup{}
+	taskCount := 5
+	tasksCompleted.Add(taskCount)
+
+	// Enqueue several tasks
+	for i := 0; i < taskCount; i++ {
+		taskID := i
+		err := worker.Enqueue(w, func() error {
+			time.Sleep(100 * time.Millisecond) // Simulate work
+			t.Logf("Task %d completed", taskID)
+			tasksCompleted.Done()
+			return nil
+		})
+		verify.NoError(t, err)
+	}
+
+	// Wait for all tasks with sufficient timeout
+	err = worker.WaitForTasks(w, 2*time.Second)
+	verify.NoError(t, err)
+
+	// Verify all tasks completed
+	done := make(chan struct{})
+	go func() {
+		tasksCompleted.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success - all tasks completed
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Tasks were not completed after WaitForTasks returned")
+	}
+}
+
+// TestWaitForTasksTimeout verifies timeout handling when waiting for tasks.
+func TestWaitForTasksTimeout(t *testing.T) {
+	cfg := worker.NewConfig(context.Background()).
+		SetRate(1). // Slow rate to ensure timeout
+		SetBurst(10)
+
+	w, err := worker.New(cfg)
+	verify.NoError(t, err)
+	defer worker.Stop(w)
+
+	// Enqueue tasks that take longer than our wait timeout
+	for i := 0; i < 5; i++ {
+		err := worker.Enqueue(w, func() error {
+			time.Sleep(500 * time.Millisecond)
+			return nil
+		})
+		verify.NoError(t, err)
+	}
+
+	// Wait with a short timeout that should expire
+	err = worker.WaitForTasks(w, 100*time.Millisecond)
+	verify.Error(t, err)
+	verify.ErrorContains(t, err, "timeout")
+}
+
+// TestWaitForTasksEmpty verifies waiting when no tasks are active.
+func TestWaitForTasksEmpty(t *testing.T) {
+	w, err := worker.New(nil)
+	verify.NoError(t, err)
+	defer worker.Stop(w)
+
+	// Wait when no tasks are enqueued should return immediately
+	start := time.Now()
+	err = worker.WaitForTasks(w, 1*time.Second)
+	duration := time.Since(start)
+
+	verify.NoError(t, err)
+	verify.True(t, duration < 100*time.Millisecond, "WaitForTasks should return immediately when no tasks are active")
+}
+
+// TestWaitForTasksWithErrors verifies waiting for tasks that return errors.
+func TestWaitForTasksWithErrors(t *testing.T) {
+	errorCount := &atomic.Int32{}
+	cfg := worker.NewConfig(context.Background()).
+		SetErrorHandler(worker.NewDefaultErrorHandler(func(te worker.TaskError) {
+			errorCount.Add(1)
+		}))
+
+	w, err := worker.New(cfg)
+	verify.NoError(t, err)
+	defer worker.Stop(w)
+
+	// Enqueue tasks that return errors
+	for i := 0; i < 3; i++ {
+		err := worker.Enqueue(w, func() error {
+			return errors.New("task error")
+		})
+		verify.NoError(t, err)
+	}
+
+	// Wait for all tasks to complete
+	err = worker.WaitForTasks(w, 1*time.Second)
+	verify.NoError(t, err)
+
+	// Verify errors were handled
+	verify.Equal(t, int32(3), errorCount.Load())
+}
+
+// TestWorkerPoolWaitForTasks verifies waiting for tasks in a worker pool.
+func TestWorkerPoolWaitForTasks(t *testing.T) {
+	cfg := worker.NewConfig(context.Background()).
+		SetRate(10).
+		SetBurst(100)
+
+	pool, err := worker.NewWorkerPool(3, cfg)
+	verify.NoError(t, err)
+	defer worker.Stop(pool)
+
+	// Track task completion across all workers
+	tasksCompleted := &sync.WaitGroup{}
+	taskCount := 15 // More than pool size to distribute across workers
+	tasksCompleted.Add(taskCount)
+
+	// Enqueue tasks
+	for i := 0; i < taskCount; i++ {
+		taskID := i
+		err := worker.Enqueue(pool, func() error {
+			time.Sleep(50 * time.Millisecond)
+			t.Logf("Pool task %d completed", taskID)
+			tasksCompleted.Done()
+			return nil
+		})
+		verify.NoError(t, err)
+	}
+
+	// Wait for all tasks across all workers
+	err = worker.WaitForTasks(pool, 2*time.Second)
+	verify.NoError(t, err)
+
+	// Verify all tasks completed
+	done := make(chan struct{})
+	go func() {
+		tasksCompleted.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Pool tasks were not completed after WaitForTasks returned")
+	}
+}
+
+// TestWorkerPoolWaitForTasksTimeout verifies timeout in worker pool.
+func TestWorkerPoolWaitForTasksTimeout(t *testing.T) {
+	cfg := worker.NewConfig(context.Background()).
+		SetRate(1).  // Slow rate
+		SetBurst(10) // Burst must be >= rate
+
+	pool, err := worker.NewWorkerPool(2, cfg)
+	verify.NoError(t, err)
+	defer worker.Stop(pool)
+
+	// Enqueue slow tasks
+	for i := 0; i < 10; i++ {
+		err := worker.Enqueue(pool, func() error {
+			time.Sleep(500 * time.Millisecond)
+			return nil
+		})
+		verify.NoError(t, err)
+	}
+
+	// Wait with short timeout
+	err = worker.WaitForTasks(pool, 100*time.Millisecond)
+	verify.Error(t, err)
+	verify.ErrorContains(t, err, "timeout")
+}
+
+// TestWaitForTasksConcurrent verifies concurrent wait operations.
+func TestWaitForTasksConcurrent(t *testing.T) {
+	w, err := worker.New(nil)
+	verify.NoError(t, err)
+	defer worker.Stop(w)
+
+	// Enqueue some tasks
+	for i := 0; i < 5; i++ {
+		err := worker.Enqueue(w, func() error {
+			time.Sleep(100 * time.Millisecond)
+			return nil
+		})
+		verify.NoError(t, err)
+	}
+
+	// Multiple goroutines waiting concurrently
+	var wg sync.WaitGroup
+	errors := make(chan error, 3)
+
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := worker.WaitForTasks(w, 2*time.Second)
+			if err != nil {
+				errors <- err
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errors)
+
+	// All wait operations should succeed
+	for err := range errors {
+		t.Errorf("Unexpected error in concurrent wait: %v", err)
+	}
 }

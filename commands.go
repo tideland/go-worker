@@ -12,6 +12,26 @@ import (
 	"time"
 )
 
+// WaitForTasks waits for all currently active tasks in the WorkProcessor to complete.
+// It returns nil if all tasks complete within the timeout, or a TimeoutError if the
+// timeout is exceeded. This is useful for ensuring all enqueued work is done before
+// proceeding with other operations.
+//
+// Example:
+//
+//	// Enqueue some tasks
+//	Enqueue(worker, task1)
+//	Enqueue(worker, task2)
+//	Enqueue(worker, task3)
+//
+//	// Wait for all tasks to complete (with 10 second timeout)
+//	if err := WaitForTasks(worker, 10*time.Second); err != nil {
+//	    log.Printf("Tasks did not complete in time: %v", err)
+//	}
+func WaitForTasks(wp WorkProcessor, timeout time.Duration) error {
+	return wp.waitForTasks(timeout)
+}
+
 // Enqueue passes a task to a WorkProcessor for background processing.
 func Enqueue(wp WorkProcessor, task Task) error {
 	return wp.enqueue(task)

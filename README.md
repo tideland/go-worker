@@ -68,6 +68,42 @@ awaiter, err := worker.AsyncAwait(w, func() error {
 err = awaiter() // Wait for completion
 ```
 
+### Wait for Tasks to Complete
+
+Wait for all currently enqueued tasks to finish processing:
+
+```go
+// Wait with timeout
+err := worker.WaitForTasks(w, 5*time.Second)
+if err != nil {
+    // Timeout occurred
+    log.Printf("Tasks did not complete in time: %v", err)
+}
+```
+
+This is useful for:
+
+- Batch processing with synchronization points
+- Ensuring work completes before shutdown
+- Pipeline stages that need to wait for previous stages
+- Testing and verification
+
+Example with batch processing:
+
+```go
+// Process first batch
+for _, item := range batch1 {
+    worker.Enqueue(w, processItem(item))
+}
+worker.WaitForTasks(w, 10*time.Second) // Wait for batch to complete
+
+// Process second batch only after first is done
+for _, item := range batch2 {
+    worker.Enqueue(w, processItem(item))
+}
+worker.WaitForTasks(w, 10*time.Second)
+```
+
 ### Stop the Worker
 
 ```go
@@ -104,6 +140,7 @@ Both Worker and WorkerPool implement the `WorkProcessor` interface internally. T
 worker.Enqueue(processor, task)
 worker.EnqueueWaiting(processor, task)
 worker.EnqueueAwaiting(processor, task, timeout)
+worker.WaitForTasks(processor, timeout)
 worker.Stop(processor)
 ```
 

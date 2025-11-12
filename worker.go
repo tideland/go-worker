@@ -24,6 +24,9 @@ type Worker struct {
 	stopOnce sync.Once
 	running  bool
 	mu       sync.RWMutex
+
+	// Task tracking
+	activeTasks sync.WaitGroup
 }
 
 // New creates and starts a new worker with the given configuration.
@@ -68,12 +71,17 @@ func (w *Worker) enqueue(task Task) error {
 		return ShuttingDownError{}
 	}
 
+	// Increment active tasks counter before sending to channel
+	w.activeTasks.Add(1)
+
 	select {
 	case <-w.ctx.Done():
+		w.activeTasks.Done() // Decrement if we fail to enqueue
 		return ShuttingDownError{}
 	case w.taskCh <- task:
 		return nil
 	case <-time.After(w.cfg.Timeout()):
+		w.activeTasks.Done() // Decrement if we fail to enqueue
 		return TimeoutError{Duration: w.cfg.Timeout()}
 	}
 }
@@ -122,6 +130,8 @@ func (w *Worker) run() {
 
 // processTask executes a single task with error handling.
 func (w *Worker) processTask(task Task) {
+	defer w.activeTasks.Done() // Decrement when task completes
+
 	if task == nil {
 		return
 	}
@@ -145,5 +155,22 @@ func (w *Worker) processPendingTasks() {
 			// No more tasks.
 			return
 		}
+	}
+}
+
+// waitForTasks waits for all active tasks to complete or until timeout.
+// This is an internal method used by commands.
+func (w *Worker) waitForTasks(timeout time.Duration) error {
+	done := make(chan struct{})
+	go func() {
+		w.activeTasks.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-time.After(timeout):
+		return TimeoutError{Duration: timeout}
 	}
 }

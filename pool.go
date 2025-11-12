@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // WorkProcessor defines the interface for types that can process tasks.
@@ -24,6 +25,9 @@ type WorkProcessor interface {
 
 	// config returns the configuration of the processor.
 	config() *Config
+
+	// waitForTasks is the internal method for waiting for all tasks to complete.
+	waitForTasks(timeout time.Duration) error
 }
 
 // WorkerPool manages a pool of workers for parallel task processing.
@@ -139,6 +143,34 @@ func (p *WorkerPool) config() *Config {
 // Size returns the number of workers in the pool.
 func (p *WorkerPool) Size() int {
 	return p.size
+}
+
+// waitForTasks waits for all active tasks in all workers to complete or until timeout.
+// This is an internal method used by commands.
+func (p *WorkerPool) waitForTasks(timeout time.Duration) error {
+	// Create a channel to collect errors from workers
+	type result struct {
+		err error
+	}
+	results := make(chan result, p.size)
+
+	// Wait for each worker in parallel
+	for _, worker := range p.workers {
+		go func(w *Worker) {
+			results <- result{err: w.waitForTasks(timeout)}
+		}(worker)
+	}
+
+	// Collect results from all workers
+	var firstErr error
+	for i := 0; i < p.size; i++ {
+		res := <-results
+		if res.err != nil && firstErr == nil {
+			firstErr = res.err
+		}
+	}
+
+	return firstErr
 }
 
 // Ensure Worker implements WorkProcessor
