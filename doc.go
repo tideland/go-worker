@@ -23,7 +23,7 @@
 //
 //	cfg := worker.NewConfig(context.Background()).
 //		SetRate(10).               // 10 tasks per second
-//		SetBurst(5).               // Buffer up to 5 tasks
+//		SetBurst(50).              // Buffer up to 50 tasks (must be >= rate)
 //		SetTimeout(time.Second)    // 1 second timeout for operations
 //
 //	if err := cfg.Error(); err != nil {
@@ -36,7 +36,7 @@
 //
 //	cfg := worker.NewConfig(context.Background()).
 //		SetRate(10).               // 10 tasks per second per worker
-//		SetBurst(5).               // Buffer up to 5 tasks per worker
+//		SetBurst(50).              // Buffer up to 50 tasks per worker (must be >= rate)
 //		SetTimeout(time.Second)    // 1 second timeout for operations
 //
 //	if err := cfg.Error(); err != nil {
@@ -64,12 +64,16 @@
 //
 // Enqueue and get an awaiter for later completion checking:
 //
-//	awaiter, err := worker.AsyncAwait(w, func() error {
+//	awaiter, err := worker.EnqueueAwaiting(w, func() error {
 //		// Do work
 //		return nil
 //	}, 5*time.Second)
 //	// Do other work...
 //	err = awaiter() // Wait for completion
+//
+// Wait for all currently enqueued tasks to complete:
+//
+//	err := worker.WaitForTasks(w, 5*time.Second)
 //
 // Stop the worker or pool gracefully:
 //

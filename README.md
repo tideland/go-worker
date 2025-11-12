@@ -24,15 +24,20 @@ Handle synchronous and asynchronous tasks enqueued in the background using indiv
 
 ```go
 // Create a worker with custom configuration
-w, err := worker.New(worker.Config{
-    Rate:    10,               // 10 tasks per second
-    Burst:   5,                // Buffer up to 5 tasks
-    Timeout: time.Second,      // 1 second timeout for operations
-})
+cfg := worker.NewConfig(context.Background()).
+    SetRate(10).                        // 10 tasks per second
+    SetBurst(50).                       // Buffer up to 50 tasks
+    SetTimeout(time.Second).            // 1 second timeout for operations
+    SetShutdownTimeout(5 * time.Second) // 5 seconds for graceful shutdown
+
+w, err := worker.New(cfg)
 if err != nil {
     log.Fatal(err)
 }
 defer worker.Stop(w)
+
+// Or use default configuration
+w, err := worker.New(nil) // Uses DefaultConfig()
 ```
 
 ### Enqueue Tasks
@@ -60,7 +65,7 @@ err := worker.EnqueueWaiting(w, func() error {
 #### Enqueue and get an awaiter for later completion checking:
 
 ```go
-awaiter, err := worker.AsyncAwait(w, func() error {
+awaiter, err := worker.EnqueueAwaiting(w, func() error {
     // Do work
     return nil
 }, 5*time.Second)
@@ -118,7 +123,7 @@ Create and use a pool of workers for parallel task processing:
 
 ```go
 // Create a pool with 5 workers
-pool, err := worker.NewWorkerPool(5, worker.DefaultConfig())
+pool, err := worker.NewWorkerPool(5, nil) // Uses DefaultConfig()
 if err != nil {
     log.Fatal(err)
 }
@@ -156,39 +161,80 @@ func processTasksWithAnyProcessor(wp worker.WorkProcessor) {
 }
 
 // Use with single worker
-w, _ := worker.New(worker.DefaultConfig())
+w, _ := worker.New(nil) // Uses DefaultConfig()
 processTasksWithAnyProcessor(w)
 
 // Use with pool
-pool, _ := worker.NewWorkerPool(5, worker.DefaultConfig())
+pool, _ := worker.NewWorkerPool(5, nil) // Uses DefaultConfig()
 processTasksWithAnyProcessor(pool)
 ```
 
 ### Configuration Options
 
-The `Config` struct allows you to customize worker behavior:
+The configuration uses a fluent builder pattern:
 
 ```go
-type Config struct {
-    Rate         int                    // Tasks per second (0 = unlimited)
-    Burst        int                    // Maximum burst size for rate limiter
-    Timeout      time.Duration          // Timeout for operations
-    ErrorHandler func(error)            // Custom error handler (optional)
+cfg := worker.NewConfig(context.Background()).
+    SetRate(100).                        // Tasks per second (must be > 0)
+    SetBurst(500).                       // Maximum burst size (must be >= rate)
+    SetTimeout(5 * time.Second).        // Timeout for operations
+    SetShutdownTimeout(10 * time.Second). // Timeout for graceful shutdown
+    SetErrorHandler(errorHandler)        // Custom error handler (optional)
+
+// Check for configuration errors
+if err := cfg.Error(); err != nil {
+    log.Fatal(err)
 }
 ```
 
-Use `worker.DefaultConfig()` for sensible defaults.
+Use `worker.DefaultConfig()` for sensible defaults, or pass `nil` to `worker.New()`.
+
+### Configuration Validation and Safety
+
+The configuration system provides automatic validation and safety:
+
+```go
+// Configuration with errors
+cfg := worker.NewConfig(context.TODO()).
+    SetContext(nil).                     // Error: context cannot be nil
+    SetRate(-10).                        // Error: rate must be positive
+    SetBurst(5).                         // Error: burst must be >= rate
+    SetTimeout(-1 * time.Second)         // Error: timeout must be positive
+
+// Check for errors explicitly
+if err := cfg.Error(); err != nil {
+    // All validation errors are reported together:
+    // context cannot be nil
+    // rate must be positive, got -10
+    // burst (5) cannot be less than rate (10)
+    // timeout must be positive, got -1s
+}
+
+// Even if you forget to check, worker.New() will catch it
+w, err := worker.New(cfg)
+if err != nil {
+    // Same validation errors reported - worker is NOT created
+}
+```
+
+**Key safety features:**
+
+- All validation errors are accumulated and reported together
+- Invalid configurations will never create workers
+- `worker.New()` and `NewWorkerPool()` always validate configuration
+- Burst is automatically adjusted if needed when setting rate
 
 ### Error Handling
 
 By default, errors are logged. You can provide a custom error handler:
 
 ```go
-cfg := worker.DefaultConfig()
-cfg.ErrorHandler = func(err error) {
-    // Custom error handling logic
-    log.Printf("Task error: %v", err)
-}
+cfg := worker.NewConfig(context.Background()).
+    SetErrorHandler(worker.NewDefaultErrorHandler(func(te worker.TaskError) {
+        // Custom error handling logic
+        log.Printf("Task error: %v at %v", te.Err, te.Timestamp)
+    }))
+
 w, _ := worker.New(cfg)
 ```
 
@@ -220,8 +266,8 @@ import (
 )
 
 func main() {
-    // Create worker
-    w, err := worker.New(worker.DefaultConfig())
+    // Create worker with default configuration
+    w, err := worker.New(nil)
     if err != nil {
         log.Fatal(err)
     }
@@ -257,8 +303,8 @@ import (
 )
 
 func main() {
-    // Create a pool with 3 workers
-    pool, err := worker.NewWorkerPool(3, worker.DefaultConfig())
+    // Create a pool with 3 workers using default configuration
+    pool, err := worker.NewWorkerPool(3, nil)
     if err != nil {
         log.Fatal(err)
     }
