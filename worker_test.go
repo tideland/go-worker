@@ -169,21 +169,21 @@ func TestAsyncAwaitOK(t *testing.T) {
 	w, err := worker.New(nil)
 	verify.NoError(t, err)
 
-	count := 0
+	var count atomic.Int32
 	awaiter, err := worker.EnqueueAwaiting(w, func() error {
 		time.Sleep(10 * time.Millisecond)
-		count++
+		count.Add(1)
 		return nil
 	}, 1*time.Second) // Longer timeout
 	verify.NoError(t, err)
 
 	// Count should still be 0 as task is running asynchronously.
-	verify.Equal(t, 0, count)
+	verify.Equal(t, int32(0), count.Load())
 
 	// Wait for task completion.
 	err = awaiter()
 	verify.NoError(t, err)
-	verify.Equal(t, 1, count)
+	verify.Equal(t, int32(1), count.Load())
 
 	err = worker.Stop(w)
 	verify.NoError(t, err)

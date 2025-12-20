@@ -112,7 +112,12 @@ func (w *Worker) stop() error {
 
 // run is the main processing loop that runs in a separate goroutine.
 func (w *Worker) run() {
-	defer close(w.done)
+	defer func() {
+		w.mu.Lock()
+		w.running = false
+		w.mu.Unlock()
+		close(w.done)
+	}()
 
 	for {
 		select {
